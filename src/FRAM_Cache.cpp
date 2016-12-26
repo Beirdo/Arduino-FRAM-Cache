@@ -23,7 +23,7 @@ Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
     m_device_size = 0;
     uint8_t manufID;
     uint16_t prodID;
-    fram->getDeviceId(&manufId, &prodId);
+    fram->getDeviceID(&manufID, &prodID);
     for (uint8_t i = 0; fram_types[i].size != 0; i++) {
         if (fram_types[i].manufID == manufID &&
             fram_types[i].prodID == prodID) {
@@ -52,17 +52,19 @@ Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
         return;
     }
 
+    m_page_size = page_size;
     m_buffer_size = buffer_size;
     if (buffer) {
         m_buffer = buffer;
     } else {
         m_buffer = new uint8_t[buffer_size];
     }
+    m_buffer_mask = buffer_size - 1;
 
     m_empty = 0;
     m_clean = true;
     m_curr_addr = 0xFFFF;
-    m_initialize = true;
+    m_initialized = true;
 }
 
 uint8_t Cache_Segment::read(uint16_t addr)
@@ -71,12 +73,12 @@ uint8_t Cache_Segment::read(uint16_t addr)
         return 0;
     }
 
-    uint16_t line_addr = addr & m_buffer_mask;
+    uint16_t line_addr = addr & ~m_buffer_mask;
     if (line_addr != m_curr_addr) {
         getCacheLine(line_addr);
     }
 
-    uint16_t offset = addr & ~m_buffer_mask;
+    uint16_t offset = addr & m_buffer_mask;
     return m_buffer[offset];
 }
 
@@ -86,12 +88,12 @@ void Cache_Segment::write(uint16_t addr, uint8_t value)
         return 0;
     }
 
-    uint16_t line_addr = addr & m_buffer_mask;
+    uint16_t line_addr = addr & ~m_buffer_mask;
     if (line_addr != m_curr_addr) {
         getCacheLine(line_addr);
     }
 
-    uint16_t offset = addr & ~m_buffer_mask;
+    uint16_t offset = addr & m_buffer_mask;
     m_buffer[offset] = value;
     m_clean = false;
 
@@ -128,9 +130,9 @@ uint32_t Cache_Segment::getPageBit(uint16_t addr)
 
 void Cache_Segment::clear(void)
 {
-    m_empty = 0;
+    m_empty = 0xFFFFFFFFL;
     m_clean = true;
-    m_cache_address = 0xFFFF;
+    m_curr_addr = 0xFFFF;
 }
 
 void Cache_Segment::flushCacheLine(void)
@@ -140,7 +142,7 @@ void Cache_Segment::flushCacheLine(void)
     }
 
     m_fram->writeEnable(true);
-    m_fram->write(m_start_addr + m_curr_addr, m_buffer, m_cache_size);
+    m_fram->write(m_start_addr + m_curr_addr, m_buffer, m_buffer_size);
     m_clean = true;
 }
 
@@ -152,17 +154,18 @@ void Cache_Segment::getCacheLine(uint16_t line_addr)
     }
 
     // Do this in page-size chunks as we track cleared buffer by pages
-    uint16_t last_page = line_addr + m_page_size;
+    uint16_t last_page = line_addr + m_buffer_size;
     for (uint16_t page_addr = line_addr; page_addr < last_page;
          page_addr += m_page_size) {
         uint32_t page_bit = getPageBit(page_addr);
-        bool empty = !(!(m_empty & pagebit));
+        bool empty = !(!(m_empty & page_bit));
+        uint16_t buff_addr = page_addr & m_buffer_mask;
 
         if (!empty) {
-            m_fram->read(m_start_addr + page_addr, m_buffer[page_addr],
+            m_fram->read(m_start_addr + page_addr, &m_buffer[buff_addr],
                          m_page_size);
         } else {
-            memset(&m_buffer[page_addr], 0x00, m_page_size);
+            memset(&m_buffer[buff_addr], 0x00, m_page_size);
         }
     }
 

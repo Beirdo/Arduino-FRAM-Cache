@@ -34,7 +34,6 @@ class Cache_Segment {
         uint16_t m_buffer_size;
         uint16_t m_buffer_mask;
         uint16_t m_page_size;
-        uint16_t m_page_mask;
         bool m_write_protected;
         uint8_t *m_buffer;
 
