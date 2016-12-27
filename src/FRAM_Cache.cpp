@@ -15,7 +15,8 @@ fram_type_t fram_types[] = {
 
 Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
                              uint16_t cache_size, uint16_t buffer_size,
-                             uint16_t page_size, uint8_t *buffer)
+                             uint16_t page_size, uint8_t *buffer_,
+                             bool circular)
 {
     m_fram = fram;
 
@@ -54,12 +55,16 @@ Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
 
     m_page_size = page_size;
     m_buffer_size = buffer_size;
-    if (buffer) {
-        m_buffer = buffer;
+    if (buffer_) {
+        m_buffer = buffer_;
     } else {
         m_buffer = new uint8_t[buffer_size];
     }
     m_buffer_mask = buffer_size - 1;
+
+    m_circular = circular;
+    m_head = 0;
+    m_tail = 0;
 
     m_empty = 0;
     m_clean = true;
@@ -171,6 +176,56 @@ void Cache_Segment::getCacheLine(uint16_t line_addr)
 
     m_clean = true;
     m_curr_addr = line_addr;
+}
+
+uint16_t Cache_Segment::circularReadAvailable(void)
+{
+    return (m_tail + m_buffer_size - m_head) & m_buffer_mask;
+}
+
+uint16_t Cache_Segment::circularRead(void)
+{
+    if (!m_circular)
+    {
+        return 0;
+    }
+
+    int16_t len = (int16_t)circularReadAvailable();
+    len = max(len, m_buffer_size);
+    len -= (m_tail & m_buffer_mask);
+
+    getCacheLine(m_tail & ~m_buffer_mask);
+
+    m_tail += len;
+    m_tail &= m_buffer_mask;
+    return len;
+}
+
+uint16_t Cache_Segment::circularWriteAvailable(void)
+{
+    return (m_head + m_buffer_size - 1 - m_tail) & m_buffer_mask;
+}
+
+uint16_t Cache_Segment::circularWrite(uint8_t *buffer_, uint16_t len)
+{
+    if (!m_circular)
+    {
+        return 0;
+    }
+
+    int16_t wrlen = (int16_t)circularWriteAvailable();
+    if (len > wrlen) {
+        return 0;
+    }
+
+    for (uint16_t i = 0; i < len; i++) {
+        write(m_head, buffer_[i]);
+        m_head += 1;
+        m_head &= m_buffer_mask;
+    }
+
+    flushCacheLine();
+    return len;
 }
 
 // vim:ts=4:sw=4:ai:et:si:sts=4

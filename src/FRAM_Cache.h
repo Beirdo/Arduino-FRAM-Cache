@@ -16,7 +16,9 @@ class Cache_Segment {
     public:
         Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
                       uint16_t cache_size, uint16_t buffer_size,
-                      uint16_t page_size, uint8_t *buffer = NULL);
+                      uint16_t page_size, uint8_t *buffer_ = NULL,
+                      bool circular = false);
+
         uint8_t read(uint16_t addr);
         void write(uint16_t addr, uint8_t value);
         void oper(uint16_t addr, oper_t oper_, uint8_t value);
@@ -25,9 +27,17 @@ class Cache_Segment {
         uint8_t *buffer(void) { return m_buffer; };
         bool initialized(void) { return m_initialized; };
         void flushCacheLine(void);
+
+        uint16_t circularReadAvailable(void);
+        uint16_t circularRead(void);
+        uint16_t circularWriteAvailable(void);
+        uint16_t circularWrite(uint8_t *buffer_, uint16_t len);
+
     protected:
         Adafruit_FRAM_SPI *m_fram;
         bool m_initialized;
+        bool m_circular;
+
         uint32_t m_device_size;
         uint16_t m_start_addr;
         uint16_t m_cache_size;
@@ -40,6 +50,9 @@ class Cache_Segment {
         uint32_t m_empty;
         bool m_clean;
         uint16_t m_curr_addr;
+
+        uint16_t m_head;        // Where to write if circular
+        uint16_t m_tail;        // Where to read if circular
 
         uint32_t getPageBit(uint16_t addr);
         void getCacheLine(uint16_t line_addr);
