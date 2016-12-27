@@ -29,7 +29,9 @@ class Cache_Segment {
         void flushCacheLine(void);
 
         uint16_t circularReadAvailable(void);
-        uint16_t circularRead(void);
+        uint16_t circularRead(uint8_t *buffer_, uint16_t maxlen,
+                              bool terminate = true);
+        uint16_t circularFind(const char *findstr);
         uint16_t circularWriteAvailable(void);
         uint16_t circularWrite(uint8_t *buffer_, uint16_t len);
 
@@ -41,6 +43,7 @@ class Cache_Segment {
         uint32_t m_device_size;
         uint16_t m_start_addr;
         uint16_t m_cache_size;
+        uint16_t m_cache_mask;
         uint16_t m_buffer_size;
         uint16_t m_buffer_mask;
         uint16_t m_page_size;

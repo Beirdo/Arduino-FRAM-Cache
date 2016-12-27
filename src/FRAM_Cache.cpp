@@ -1,6 +1,7 @@
 #include "Arduino.h"
 #include <Adafruit_FRAM_SPI.h>
 #include "FRAM_Cache.h"
+#include <string.h>
 
 typedef struct {
     uint8_t manufID;
@@ -43,6 +44,8 @@ Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
 
     m_start_addr = start_addr;
     m_cache_size = cache_size;
+    m_cache_mask = cache_size - 1;
+
     m_write_protected = false;      // Start off writable
 
     if (buffer_size > cache_size) {
@@ -138,6 +141,8 @@ void Cache_Segment::clear(void)
     m_empty = 0xFFFFFFFFL;
     m_clean = true;
     m_curr_addr = 0xFFFF;
+    m_head = 0;
+    m_tail = 0;
 }
 
 void Cache_Segment::flushCacheLine(void)
@@ -180,30 +185,46 @@ void Cache_Segment::getCacheLine(uint16_t line_addr)
 
 uint16_t Cache_Segment::circularReadAvailable(void)
 {
-    return (m_tail + m_buffer_size - m_head) & m_buffer_mask;
+    return (m_tail + m_cache_size - m_head) & m_cache_mask;
 }
 
-uint16_t Cache_Segment::circularRead(void)
+uint16_t Cache_Segment::circularRead(uint8_t *buffer_, uint16_t maxlen,
+                                     bool terminate)
 {
     if (!m_circular)
     {
         return 0;
     }
 
-    int16_t len = (int16_t)circularReadAvailable();
-    len = max(len, m_buffer_size);
-    len -= (m_tail & m_buffer_mask);
+    if (terminate) {
+        maxlen--;
+    }
 
-    getCacheLine(m_tail & ~m_buffer_mask);
+    uint16_t avail = circularReadAvailable();
+    avail = min(avail, maxlen);
+    uint16_t len = 0;
 
-    m_tail += len;
-    m_tail &= m_buffer_mask;
-    return len;
+    for (uint16_t i = 0; i < avail; i += len) {
+        len = min(avail - i, m_buffer_size);
+        len -= (m_tail & m_buffer_mask);
+
+        getCacheLine(m_tail & ~m_buffer_mask);
+
+        memcpy(&buffer_[i], m_buffer, len);
+        m_tail += len;
+        m_tail &= m_cache_mask;
+    }
+
+    if (terminate) {
+        buffer_[avail] = '\0';
+    }
+
+    return avail;
 }
 
 uint16_t Cache_Segment::circularWriteAvailable(void)
 {
-    return (m_head + m_buffer_size - 1 - m_tail) & m_buffer_mask;
+    return (m_head + m_cache_size - 1 - m_tail) & m_cache_mask;
 }
 
 uint16_t Cache_Segment::circularWrite(uint8_t *buffer_, uint16_t len)
@@ -221,11 +242,80 @@ uint16_t Cache_Segment::circularWrite(uint8_t *buffer_, uint16_t len)
     for (uint16_t i = 0; i < len; i++) {
         write(m_head, buffer_[i]);
         m_head += 1;
-        m_head &= m_buffer_mask;
+        m_head &= m_cache_mask;
     }
 
     flushCacheLine();
     return len;
+}
+
+bool Cache_Segment::circularFind(const char *findstr)
+{
+    if (!m_circular)
+    {
+        return false;
+    }
+
+    int16_t total = (int16_t)circularReadAvailable();
+    int16_t len = 0;
+    int16_t findlen = strlen(findstr);
+
+    char *searchstr = findstr;
+    int16_t searchlen = findlen;
+    uint16_t loc = 0;
+
+    for (int16_t i = 0; i < total; i += len) {
+        len = min(total - i, m_buffer_size);
+        len -= (m_tail & m_buffer_mask);
+
+        getCacheLine((m_tail + i) & ~m_buffer_mask);
+
+        char *found = memmem(m_buffer, len, searchstr, searchlen)
+        if (found) {
+            loc = (m_tail + i + m_buffer + m_cache_size - found) & m_cache_mask;
+            len = (loc + m_cache_size - m_tail + findlen) & m_cache_mask;
+            return len
+        }
+
+        char *searchsubstr = searchstr;
+        char *substr = memchr(m_buffer, *searchsubstr++, len);
+        while (substr) {
+            uint8_t matched = 0;
+            uint8_t remlen = len - (substr - m_buffer);
+            uint8_t sublen = remlen;
+            char *searchsub = substr;
+            do {
+                matched++;
+                searchsub++;
+                if (remlen == 1) {
+                    searchlen -= matched;
+                    break;
+                }
+                
+                if (*searchsub != *searchsubstr++) {
+                    searchsubstr = searchstr;
+                    searchlen = findlen;
+                    substr = memchr(&substr[1], *searchsubstr++, sublen - 1);
+                    remlen = len - (substr - m_buffer);
+                    sublen = remlen;
+                    break;
+                }
+
+                remlen--;
+            } while (remlen);
+
+            if (remlen == 1) {
+                break;
+            }
+        }
+
+        if (!substr) {
+            searchstr = findstr;
+            searchlen = findlen;
+        }
+    }
+
+    return 0;
 }
 
 // vim:ts=4:sw=4:ai:et:si:sts=4
