@@ -249,7 +249,7 @@ uint16_t Cache_Segment::circularWrite(uint8_t *buffer_, uint16_t len)
     return len;
 }
 
-bool Cache_Segment::circularFind(const char *findstr)
+uint16_t Cache_Segment::circularFind(const char *findstr)
 {
     if (!m_circular)
     {
@@ -270,19 +270,19 @@ bool Cache_Segment::circularFind(const char *findstr)
 
         getCacheLine((m_tail + i) & ~m_buffer_mask);
 
-        char *found = memmem(m_buffer, len, searchstr, searchlen)
+        uint8_t *found = memmem(m_buffer, len, searchstr, searchlen);
         if (found) {
             loc = (m_tail + i + m_buffer + m_cache_size - found) & m_cache_mask;
             len = (loc + m_cache_size - m_tail + findlen) & m_cache_mask;
-            return len
+            return len;
         }
 
         char *searchsubstr = searchstr;
         char *substr = memchr(m_buffer, *searchsubstr++, len);
         while (substr) {
             uint8_t matched = 0;
-            uint8_t remlen = len - (substr - m_buffer);
-            uint8_t sublen = remlen;
+            uint16_t remlen = len - (substr - (char *)m_buffer);
+            uint16_t sublen = remlen;
             char *searchsub = substr;
             do {
                 matched++;
@@ -296,7 +296,7 @@ bool Cache_Segment::circularFind(const char *findstr)
                     searchsubstr = searchstr;
                     searchlen = findlen;
                     substr = memchr(&substr[1], *searchsubstr++, sublen - 1);
-                    remlen = len - (substr - m_buffer);
+                    remlen = len - (substr - (char *)m_buffer);
                     sublen = remlen;
                     break;
                 }
