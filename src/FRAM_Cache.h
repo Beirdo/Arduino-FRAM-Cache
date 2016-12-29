@@ -40,7 +40,7 @@ class Cache_Segment {
         bool m_initialized;
         bool m_circular;
 
-        uint32_t m_device_size;
+        uint16_t m_device_size;
         uint16_t m_start_addr;
         uint16_t m_cache_size;
         uint16_t m_cache_mask;

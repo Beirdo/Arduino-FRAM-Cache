@@ -1,4 +1,4 @@
-#include "Arduino.h"
+#include <Arduino.h>
 #include <Adafruit_FRAM_SPI.h>
 #include "FRAM_Cache.h"
 #include <string.h>
@@ -6,13 +6,13 @@
 typedef struct {
     uint8_t manufID;
     uint16_t prodID;
-    uint32_t size;
+    uint16_t size;
 } fram_type_t;
 
-fram_type_t fram_types[] = {
+static const fram_type_t fram_types[] = {
     { 0x04, 0x0302, 8192 },
-    { 0x00, 0x0000, 0 },
 };
+static const uint8_t fram_type_count = sizeof(fram_types)/sizeof(fram_type_t);
 
 Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
                              uint16_t cache_size, uint16_t buffer_size,
@@ -26,7 +26,7 @@ Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
     uint8_t manufID;
     uint16_t prodID;
     fram->getDeviceID(&manufID, &prodID);
-    for (uint8_t i = 0; fram_types[i].size != 0; i++) {
+    for (uint8_t i = 0; i < fram_type_count; i++) {
         if (fram_types[i].manufID == manufID &&
             fram_types[i].prodID == prodID) {
             m_device_size = fram_types[i].size;
