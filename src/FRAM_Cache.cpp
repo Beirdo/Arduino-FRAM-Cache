@@ -93,7 +93,7 @@ uint8_t Cache_Segment::read(uint16_t addr)
 void Cache_Segment::write(uint16_t addr, uint8_t value)
 {
     if (!m_initialized || m_write_protected) {
-        return 0;
+        return;
     }
 
     uint16_t line_addr = addr & ~m_buffer_mask;
@@ -260,7 +260,7 @@ uint16_t Cache_Segment::circularFind(const char *findstr)
     int16_t len = 0;
     int16_t findlen = strlen(findstr);
 
-    char *searchstr = findstr;
+    char *searchstr = (char *)findstr;
     int16_t searchlen = findlen;
     uint16_t loc = 0;
 
@@ -270,7 +270,7 @@ uint16_t Cache_Segment::circularFind(const char *findstr)
 
         getCacheLine((m_tail + i) & ~m_buffer_mask);
 
-        uint8_t *found = memmem(m_buffer, len, searchstr, searchlen);
+        uint8_t *found = (uint8_t *)memmem(m_buffer, len, searchstr, searchlen);
         if (found) {
             loc = (m_tail + i + m_buffer + m_cache_size - found) & m_cache_mask;
             len = (loc + m_cache_size - m_tail + findlen) & m_cache_mask;
@@ -278,7 +278,7 @@ uint16_t Cache_Segment::circularFind(const char *findstr)
         }
 
         char *searchsubstr = searchstr;
-        char *substr = memchr(m_buffer, *searchsubstr++, len);
+        char *substr = (char *)memchr(m_buffer, *searchsubstr++, len);
         while (substr) {
             uint8_t matched = 0;
             uint16_t remlen = len - (substr - (char *)m_buffer);
@@ -295,7 +295,8 @@ uint16_t Cache_Segment::circularFind(const char *findstr)
                 if (*searchsub != *searchsubstr++) {
                     searchsubstr = searchstr;
                     searchlen = findlen;
-                    substr = memchr(&substr[1], *searchsubstr++, sublen - 1);
+                    substr = (char *)memchr(&substr[1], *searchsubstr++,
+                                            sublen - 1);
                     remlen = len - (substr - (char *)m_buffer);
                     sublen = remlen;
                     break;
@@ -310,7 +311,7 @@ uint16_t Cache_Segment::circularFind(const char *findstr)
         }
 
         if (!substr) {
-            searchstr = findstr;
+            searchstr = (char *)findstr;
             searchlen = findlen;
         }
     }
