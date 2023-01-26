@@ -2,6 +2,7 @@
 #include <Adafruit_FRAM_SPI.h>
 #include "FRAM_Cache.h"
 #include <string.h>
+#include <stdlib.h>
 
 typedef struct {
     uint8_t manufID;
@@ -23,15 +24,24 @@ Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
 
     m_initialized = false;
     m_device_size = 0;
-    uint8_t manufID;
-    uint16_t prodID;
-    fram->getDeviceID(&manufID, &prodID);
-    for (uint8_t i = 0; i < fram_type_count; i++) {
-        if (fram_types[i].manufID == manufID &&
-            fram_types[i].prodID == prodID) {
-            m_device_size = fram_types[i].size;
-            break;
+    m_mirror = NULL;
+
+    if (fram) {
+        uint8_t manufID;
+        uint16_t prodID;
+        fram->getDeviceID(&manufID, &prodID);
+        for (uint8_t i = 0; i < fram_type_count; i++) {
+            if (fram_types[i].manufID == manufID &&
+                fram_types[i].prodID == prodID) {
+                m_device_size = fram_types[i].size;
+                break;
+            }
         }
+        m_empty = 0xFFFFFFFFL;
+    } else {
+        m_device_size = 8192;
+        m_mirror = new uint8_t[m_device_size];
+        m_empty = 1;
     }
 
     if (m_device_size == 0) {
@@ -69,7 +79,6 @@ Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
     m_head = 0;
     m_tail = 0;
 
-    m_empty = 0;
     m_clean = true;
     m_curr_addr = 0xFFFF;
     m_initialized = true;
@@ -151,8 +160,12 @@ void Cache_Segment::flushCacheLine(void)
         return;
     }
 
-    m_fram->writeEnable(true);
-    m_fram->write(m_start_addr + m_curr_addr, m_buffer, m_buffer_size);
+    if (m_fram) {
+        m_fram->writeEnable(true);
+        m_fram->write(m_start_addr + m_curr_addr, m_buffer, m_buffer_size);
+    } else {
+        memcpy(&m_mirror[m_start_addr + m_curr_addr], m_buffer, m_buffer_size);
+    }
     m_clean = true;
 }
 
@@ -172,8 +185,13 @@ void Cache_Segment::getCacheLine(uint16_t line_addr)
         uint16_t buff_addr = page_addr & m_buffer_mask;
 
         if (!empty) {
-            m_fram->read(m_start_addr + page_addr, &m_buffer[buff_addr],
-                         m_page_size);
+            if (m_fram) {
+                m_fram->read(m_start_addr + page_addr, &m_buffer[buff_addr],
+                             m_page_size);
+            } else {
+                memcpy(&m_buffer[buff_addr],
+                       &m_mirror[m_start_addr + page_addr], m_page_size);
+            }
         } else {
             memset(&m_buffer[buff_addr], 0x00, m_page_size);
         }

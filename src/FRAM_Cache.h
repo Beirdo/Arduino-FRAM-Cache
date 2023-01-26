@@ -49,6 +49,7 @@ class Cache_Segment {
         uint16_t m_page_size;
         bool m_write_protected;
         uint8_t *m_buffer;
+        uint8_t *m_mirror;      // when using no actual FRAM
 
         uint32_t m_empty;
         bool m_clean;
