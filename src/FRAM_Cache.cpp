@@ -4,6 +4,10 @@
 #include <string.h>
 #include <stdlib.h>
 
+#ifndef memmem
+#include "memmem.h"
+#endif
+
 typedef struct {
     uint8_t manufID;
     uint16_t prodID;
