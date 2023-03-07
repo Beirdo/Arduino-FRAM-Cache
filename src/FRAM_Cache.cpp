@@ -8,6 +8,7 @@
 
 #ifndef memmem
 #include "memmem.h"
+#endif
 
 #ifdef SKIP_SPI
 class Adafruit_FRAM_SPI;
