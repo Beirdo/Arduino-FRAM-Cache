@@ -1,11 +1,16 @@
 #include <Arduino.h>
+#ifndef SKIP_SPI
 #include <Adafruit_FRAM_SPI.h>
+#endif
 #include "FRAM_Cache.h"
 #include <string.h>
 #include <stdlib.h>
 
 #ifndef memmem
 #include "memmem.h"
+
+#ifdef SKIP_SPI
+class Adafruit_FRAM_SPI;
 #endif
 
 typedef struct {
@@ -24,16 +29,20 @@ Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
                              uint16_t page_size, uint8_t *buffer_,
                              bool circular)
 {
+#ifdef SKIP_SPI
+    fram = 0;
+#endif
     m_fram = fram;
 
     m_initialized = false;
     m_device_size = 0;
     m_mirror = NULL;
 
-    if (fram) {
+#ifndef SKIP_SPI
+    if (m_fram) {
         uint8_t manufID;
         uint16_t prodID;
-        fram->getDeviceID(&manufID, &prodID);
+        m_fram->getDeviceID(&manufID, &prodID);
         for (uint8_t i = 0; i < fram_type_count; i++) {
             if (fram_types[i].manufID == manufID &&
                 fram_types[i].prodID == prodID) {
@@ -43,6 +52,9 @@ Cache_Segment::Cache_Segment(Adafruit_FRAM_SPI *fram, uint16_t start_addr,
         }
         m_empty = 0xFFFFFFFFL;
     } else {
+#else
+    if (1) {
+#endif
         m_device_size = 8192;
         m_mirror = new uint8_t[m_device_size];
         m_empty = 1;
@@ -164,10 +176,14 @@ void Cache_Segment::flushCacheLine(void)
         return;
     }
 
+#ifndef SKIP_SPI
     if (m_fram) {
         m_fram->writeEnable(true);
         m_fram->write(m_start_addr + m_curr_addr, m_buffer, m_buffer_size);
     } else {
+#else
+    if (1) {
+#endif
         memcpy(&m_mirror[m_start_addr + m_curr_addr], m_buffer, m_buffer_size);
     }
     m_clean = true;
@@ -189,10 +205,14 @@ void Cache_Segment::getCacheLine(uint16_t line_addr)
         uint16_t buff_addr = page_addr & m_buffer_mask;
 
         if (!empty) {
+#ifndef SKIP_SPI
             if (m_fram) {
                 m_fram->read(m_start_addr + page_addr, &m_buffer[buff_addr],
                              m_page_size);
             } else {
+#else
+            if (1) {
+#endif
                 memcpy(&m_buffer[buff_addr],
                        &m_mirror[m_start_addr + page_addr], m_page_size);
             }
@@ -227,7 +247,7 @@ uint16_t Cache_Segment::circularRead(uint8_t *buffer_, uint16_t maxlen,
     uint16_t len = 0;
 
     for (uint16_t i = 0; i < avail; i += len) {
-        len = min(avail - i, m_buffer_size);
+        len = min((int)(avail - i), (int)m_buffer_size);
         len -= (m_tail & m_buffer_mask);
 
         getCacheLine(m_tail & ~m_buffer_mask);
@@ -287,7 +307,7 @@ uint16_t Cache_Segment::circularFind(const char *findstr)
     uint16_t loc = 0;
 
     for (int16_t i = 0; i < total; i += len) {
-        len = min(total - i, m_buffer_size);
+        len = min((int)(total - i), (int)m_buffer_size);
         len -= (m_tail & m_buffer_mask);
 
         getCacheLine((m_tail + i) & ~m_buffer_mask);

@@ -2,7 +2,11 @@
 #define FRAM_CACHE_H__
 
 #include <inttypes.h>
+#ifndef SKIP_SPI
 #include <Adafruit_FRAM_SPI.h>
+#else
+class Adafruit_FRAM_SPI;
+#endif
 
 class FRAM_Cache;
 
